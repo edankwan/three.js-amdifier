@@ -1,0 +1,3 @@
+define([{{module_paths}}],
+    function ({{module_names}}) {
+

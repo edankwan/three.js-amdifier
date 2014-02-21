@@ -1,0 +1,10 @@
+{
+    "name": "three.js-amdifier",
+    "version": "0.0.1",
+    "author": "edankwan",
+    "private": true,
+    "devDependencies": {
+        "wrench" : "~1.5.7",
+        "mout" : "~0.9.0"
+    }
+}
