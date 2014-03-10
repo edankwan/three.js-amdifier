@@ -14,6 +14,15 @@ var _trim = require('mout/string/trim');
 var _bind = require('mout/function/bind');
 var _interpolate = require('mout/string/interpolate');
 
+var INCLUDE_LIST = [
+    'includes/math.json',
+    'includes/extras.json',
+    'includes/common.json'
+];
+
+
+
+
 var self = {}; // This is used in THREE.js
 
 var _maps = {};
@@ -29,7 +38,11 @@ var SHADOW_THREE = {};
 
 var _globalCalledProperties = [];
 
+var _classOrders = {};
+var _mapList = [];
+
 function init() {
+    _generateClassOrderList();
     _loadBuiltTHREE();
     _addModulesToMap();
     _maps.THREE = _maps.Three;
@@ -40,6 +53,27 @@ function init() {
     _findDependencies();
     _output();
     _generateReport();
+}
+
+function _generateClassOrderList() {
+    var fileList = [];
+    var added = {};
+    var className;
+    var filePath;
+    var orderIndex = 0;
+    for(var i = 0, len = INCLUDE_LIST.length; i < len; i++) {
+        var includePath = INCLUDE_LIST[i];
+        var list = JSON.parse(_fs.readFileSync(includePath, 'utf8'));
+        for(var j = 0, len2 = list.length; j < len2; j++) {
+            filePath = list[j];
+            className = filePath.substring(filePath.lastIndexOf('/') + 1, filePath.lastIndexOf('.js'));
+            if(!added[className]) {
+                added[className] = true;
+                _classOrders[className] = orderIndex;
+                orderIndex++;
+            }
+        }
+    }
 }
 
 function _loadBuiltTHREE() {
@@ -69,7 +103,8 @@ function _addModuleToMap(filePath, modulePath){
         allDependencies: [],
         missingDepencencies: []
     };
-
+    if(moduleName === 'Three') moduleName = 'THREE';
+    _mapList.push(moduleName);
 }
 
 function _addModulesToMap() {
@@ -83,11 +118,15 @@ function _addModulesToMap() {
         filePath.replace(/^(.*).js$/, _addModuleToMap);
     }
 
+    _mapList.sort(function(a, b){
+        return _classOrders[a] - _classOrders[b];
+    });
 }
 
 function _findDependencies() {
-    var i, moduleName, mapData, softDependencies;
-    for(moduleName in _maps) {
+    var i, j, len, moduleName, mapData, softDependencies;
+    for(i = 0, len = _mapList.length; i < len; i++) {
+        moduleName = _mapList[i];
         mapData = _maps[moduleName];
         mapData.content = _fs.readFileSync(SRC_DIR + mapData.filePath, 'utf8');
         mapData.noCommentContent = _removeComments(mapData.content);
@@ -101,7 +140,8 @@ function _findDependencies() {
         });
         mapData.extraModules = _unique(mapData.extraModules);
     }
-    for(moduleName in _maps) {
+    for(i = 0, len = _mapList.length; i < len; i++) {
+        moduleName = _mapList[i];
         mapData = _maps[moduleName];
         // dependencies = [];
         mapData.noCommentContent.replace(/THREE\.([^ (){};.,|\[\]\?:\/\<\>\'\"\n\r]+)/g, function(match, matchedModuleName) {
@@ -136,16 +176,17 @@ function _findDependencies() {
         mapData.missingDepencencies = _unique(mapData.missingDepencencies);
     }
 
-    for(moduleName in _maps) {
+    for(i = 0, len = _mapList.length; i < len; i++) {
+        moduleName = _mapList[i];
         mapData = _maps[moduleName];
 
         softDependencies = mapData.softDependencies;
 
-        i = softDependencies.length;
-        while(i--) {
-            if(!testDependencyTraceBack(softDependencies[i], moduleName, {})) {
-                mapData.dependencies.push(softDependencies[i]);
-                softDependencies.splice(i, 1);
+        j = softDependencies.length;
+        while(j--) {
+            if(!testDependencyTraceBack(softDependencies[j], moduleName, {})) {
+                mapData.dependencies.push(softDependencies[j]);
+                softDependencies.splice(j, 1);
             }
         }
 
@@ -185,7 +226,8 @@ function testDependencyTraceBack(moduleName, originalModuleName, checkedList) {
 function _generateReport() {
     var html = '';
     var mapData, i, len;
-    for(var moduleName in _maps) {
+    for(i = 0, len = _mapList.length; i < len; i++) {
+        moduleName = _mapList[i];
         mapData = _maps[moduleName];
         html += '<h2>-' + moduleName + '</h2>';
         html += '<ul>';
@@ -221,7 +263,8 @@ function _output() {
     if (_fs.existsSync(DIST_DIR)) {
         _wrench.rmdirSyncRecursive(DIST_DIR);
     }
-    for(moduleName in _maps) {
+    for(var i = 0, len = _mapList.length; i < len; i++) {
+        moduleName = _mapList[i];
         mapData = _maps[moduleName];
         modulePath = mapData.path;
         content = mapData.content;
