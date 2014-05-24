@@ -1,5 +1,6 @@
 var _undef;
 
+// Tools
 var _wrench = require('wrench');
 var _fs = require('fs');
 var _path = require('path');
@@ -15,12 +16,10 @@ var _bind = require('mout/function/bind');
 var _interpolate = require('mout/string/interpolate');
 
 var INCLUDE_LIST = [
-    'includes/math.json',
-    'includes/extras.json',
-    'includes/common.json'
+    'threejs/utils/build/includes/math.json',
+    'threejs/utils/build/includes/extras.json',
+    'threejs/utils/build/includes/common.json'
 ];
-
-
 
 
 var self = {}; // This is used in THREE.js
@@ -29,10 +28,12 @@ var _maps = {};
 var _extraMaps = {};
 var _allMaps = {};
 
-var SRC_DIR = './src/';
+var SRC_DIR = './threejs/src/';
 var DIST_DIR = './dist/';
-var BUILD_SRC_PATH = './built_three_src/Three.min.js';
+var BUILD_SRC_PATH = './threejs/build/three.min.js';
 var REPORT_PATH = './report.html';
+
+var TRY_ADDING_FURTHER_DEPENDENCIES = true;
 
 var SHADOW_THREE = {};
 
@@ -55,6 +56,7 @@ function init() {
     _generateReport();
 }
 
+// use the json file list as the dependency order.
 function _generateClassOrderList() {
     var fileList = [];
     var added = {};
@@ -76,6 +78,7 @@ function _generateClassOrderList() {
     }
 }
 
+// load the built THREE js file and create getter/setter for its root properties.
 function _loadBuiltTHREE() {
     var _THREE;
     eval(_fs.readFileSync(BUILD_SRC_PATH, 'utf8') + ';_THREE=THREE;');
@@ -99,8 +102,8 @@ function _addModuleToMap(filePath, modulePath){
         filePath: filePath.replace(/\\/g, '/'),
         extraModules: [], // for test if there are more than one module defined in one file
         softDependencies: [],
-        // circularDepencencies: [],
         allDependencies: [],
+        dependedBy: [],
         missingDepencencies: []
     };
     if(moduleName === 'Three') moduleName = 'THREE';
@@ -146,8 +149,12 @@ function _findDependencies() {
         // dependencies = [];
         mapData.noCommentContent.replace(/THREE\.([^ (){};.,|\[\]\?:\/\<\>\'\"\n\r]+)/g, function(match, matchedModuleName) {
             matchedModuleName = _trim(matchedModuleName);
-            if(matchedModuleName !== mapData.name) {
+
+            // Found module is not the module itself
+            if(matchedModuleName !== moduleName) {
+
                 // If it depends on its self extra module, ignore it
+
                 if(!_contains(mapData.extraModules, matchedModuleName)) {
                     if(!_allMaps[matchedModuleName]) {
                         mapData.missingDepencencies.push(matchedModuleName);
@@ -160,6 +167,7 @@ function _findDependencies() {
         _globalCalledProperties = [];
         var THREE = SHADOW_THREE;
 
+        // use eval to check what module was actually called when the module is required.
         if(moduleName !== 'THREE') {
             eval(mapData.content);
             mapData.dependencies = _unique(_globalCalledProperties);
@@ -167,8 +175,9 @@ function _findDependencies() {
         }
 
         mapData.dependencies = _reject(mapData.dependencies, function(dependency){
-            return dependency === moduleName;
+            return dependency === moduleName || _contains(mapData.extraModules, dependency);
         });
+
         allDependencies = _unique(mapData.allDependencies);
         mapData.softDependencies = _reject(_unique(mapData.allDependencies), function(dependency) {
             return _contains(mapData.dependencies, dependency);
@@ -176,25 +185,40 @@ function _findDependencies() {
         mapData.missingDepencencies = _unique(mapData.missingDepencencies);
     }
 
-    for(i = 0, len = _mapList.length; i < len; i++) {
-        moduleName = _mapList[i];
-        mapData = _maps[moduleName];
+    // //get dependedBy from out soft dependencies
+    // for(i = 0, len = _mapList.length; i < len; i++) {
+    //     moduleName = _mapList[i];
+    //     mapData = _maps[moduleName];
+    //     softDependencies = mapData.softDependencies;
+    //     j = softDependencies.length;
+    //     while(j--) {
+    //         _mapList[mapData.softDependencies[j]].dependedBy.push(moduleName);
+    //     }
+    // }
 
-        softDependencies = mapData.softDependencies;
 
-        j = softDependencies.length;
-        while(j--) {
-            if(!testDependencyTraceBack(softDependencies[j], moduleName, {})) {
-                mapData.dependencies.push(softDependencies[j]);
-                softDependencies.splice(j, 1);
+    // will need better logic for this.
+    if(TRY_ADDING_FURTHER_DEPENDENCIES) {
+
+        for(i = 0, len = _mapList.length; i < len; i++) {
+            moduleName = _mapList[i];
+            mapData = _maps[moduleName];
+            softDependencies = mapData.softDependencies;
+            j = softDependencies.length;
+            while(j--) {
+                if(!testDependencyTraceBack(softDependencies[j], moduleName, {})) {
+                    mapData.dependencies.push(softDependencies[j]);
+                    softDependencies.splice(j, 1);
+                }
             }
+
         }
 
     }
 
-
 }
 
+// function to test if the dependency will trace it back to the module itself
 function testDependencyTraceBack(moduleName, originalModuleName, checkedList) {
     var result, dependency;
     var mapData = _maps[moduleName];
@@ -224,31 +248,33 @@ function testDependencyTraceBack(moduleName, originalModuleName, checkedList) {
 
 
 function _generateReport() {
-    var html = '';
+    var html = '<html><head><style>body{font-family:"Trebuchet MS",Helvetica,sans-serif;}</style></head><body>';
     var mapData, i, len;
     for(i = 0, len = _mapList.length; i < len; i++) {
         moduleName = _mapList[i];
         mapData = _maps[moduleName];
-        html += '<h2>-' + moduleName + '</h2>';
+        html += '<h2>- ' + moduleName + '</h2>';
         html += '<ul>';
         html += '<li>Module Path: ' + mapData.path + '</li>';
         html += '<li>File Path: ' + mapData.filePath + '</li>';
-        if(mapData.extraModules.length > 0) {
+        // if(mapData.extraModules.length > 0) {
             html += '<li>Extra modules: ' + mapData.extraModules.join(', ') + '</li>';
-        }
-        if(mapData.dependencies.length > 0) {
+        // }
+        // if(mapData.dependencies.length > 0) {
             html += '<li>Dependencies: ' + mapData.dependencies.join(', ') + '</li>';
-        }
-        // html += '<li>Circular dependencies: ' + mapData.circularDepencencies.join(', ') + '</li>';
-        if(mapData.softDependencies.length > 0) {
+        // }
+        // if(mapData.softDependencies.length > 0) {
             html += '<li>Soft dependencies: ' + mapData.softDependencies.join(', ') + '</li>';
-        }
-        if(mapData.missingDepencencies.length > 0) {
+        // }
+        // if(mapData.missingDepencencies.length > 0) {
             html += '<li>Missing dependencies: ' + mapData.missingDepencencies.join(', ') + '</li>';
-        }
+        // }
         html += '</ul>';
-        html += '<hr/>';
+        if(i < len - 1) {
+            html += '<hr/>';
+        }
     }
+    html += '</body></html>';
     _fs.writeFileSync(REPORT_PATH, html, 'utf8');
 }
 
@@ -280,6 +306,11 @@ function _output() {
                 }
                 modulePaths.push('\'' + relativePath + '\'');
                 moduleNames.push(dependencyMapData.name === 'THREE' ? 'THREE' : 'THREE_' + dependencyMapData.name);
+
+                if(dependencyMapData.name !== 'THREE') {
+                    var regex = new RegExp('(THREE\\.' + dependencyMapData.name + ')(\\W+)', 'g');
+                    content = content.replace(regex, function(a, b, c){return 'THREE_' + dependencyMapData.name + c;});
+                }
             }
         });
 

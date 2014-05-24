@@ -55,10 +55,9 @@ The codes are messy and no guaranty for anything.
 
 ###Usage
 1. Run `npm install`
-2. Put the Three.min.js into the `built_three_src` folder
-3. Put the src of `Three.js` into the `src` folder
-4. Run `node amdifier.js`
-5. Move the amd three.js source codes from `dist` into your project.
+2. Download the latest Three.js repo, and put everything in its root directory into the `threejs` folder
+3. Run `node amdifier.js`
+4. Move the amd three.js source codes from `dist` into your project.
 5. Load the module you needed in your app. If there are missing modules, check file link in the error console in the browser dev tool, found out which modules are missing, and add it into you app. 
  
 See the `report.html`. If there is any **Missing dependencies**. In r66, only the `REVISION` is missing because they don't use the pattern above to define but it doesn't matter. If you found other missing dependencies, this tool probably doesn't work due to the pattern changes.
@@ -67,7 +66,7 @@ See the `report.html`. If there is any **Missing dependencies**. In r66, only th
 
 - Codes clean up
 - Replace variable names and not exposing everything in the 'THREE'.
-- Put `Scene`, `WebGLRenderer`, `Perspective Camera` and other commonly used modules to higher priority in dependencies lookUp. Right now, I add it randomly and it might not been ideal for the file size.
+- Find a better way to handle the dependencies like putting `Scene`, `WebGLRenderer`, `Perspective Camera` and other commonly used modules to higher priority in dependencies lookUp. Right now, I add it randomly and it might not been ideal for the file size.
 
 
 ###Credit
